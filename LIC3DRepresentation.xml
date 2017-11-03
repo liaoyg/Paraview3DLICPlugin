@@ -22,40 +22,6 @@
         <Documentation>Set the input to the representation.</Documentation>
       </InputProperty>
 
-      <StringVectorProperty name="InputVectors"
-                            command="SetInputVectors"
-                            number_of_elements="5"
-                            element_types="0 0 0 0 2"
-                            label="Vectors">
-        <ArrayListDomain name="array_list"
-                         attribute_type="Vectors"
-                         input_domain_name="input_vectors">
-          <RequiredProperties>
-            <Property name="Input" function="Input"/>
-          </RequiredProperties>
-        </ArrayListDomain>
-        <FieldDataDomain name="field_list"
-                         disable_update_domain_entries="1">
-          <RequiredProperties>
-            <Property name="Input" function="Input"/>
-          </RequiredProperties>
-        </FieldDataDomain>
-
-        <Documentation>
-          This property specifies the name of the input vector array to process.
-        </Documentation>
-      </StringVectorProperty>
-
-      <ProxyProperty command="SetLookupTable"
-                     name="LookupTable"
-                     skip_dependency="1">
-        <Documentation>Set the lookup-table to use to map data array to colors.
-        Lookuptable is only used with MapScalars to ON.</Documentation>
-        <ProxyGroupDomain name="groups">
-          <Group name="lookup_tables" />
-        </ProxyGroupDomain>
-      </ProxyProperty>
-
       <StringVectorProperty command="SetInputArrayToProcess"
                             element_types="0 0 0 0 2"
                             name="ColorArrayName"
@@ -88,46 +54,6 @@
         <Documentation>Set the visibility for this representation.
         </Documentation>
       </IntVectorProperty>
-
-      <DoubleVectorProperty command="SetOpacity"
-                            default_values="1.0"
-                            name="Opacity"
-                            number_of_elements="1">
-        <DoubleRangeDomain max="1"
-                           min="0"
-                           name="range" />
-      </DoubleVectorProperty>
-
-      <DoubleVectorProperty name="DiffuseColor"
-                            command="SetDiffuseColor"
-                            default_values="0.0 1.0 0.0"
-                            number_of_elements="3"
-                            panel_widget="color_selector_with_palette">
-        <DoubleRangeDomain max="1 1 1"
-                           min="0 0 0"
-                           name="range" />
-        <Hints>
-          <GlobalPropertyLink type="ColorPalette" property="SurfaceColor" />
-        </Hints>
-      </DoubleVectorProperty>
-
-      <DoubleVectorProperty name="LineWidth"
-                            command="SetLineWidth"
-                            default_values="1.0"
-                            number_of_elements="1">
-        <DoubleRangeDomain min="1"
-                           name="range" />
-      </DoubleVectorProperty>
-
-      <DoubleVectorProperty name="Alpha"
-                            command="SetAlpha"
-                            number_of_elements="1"
-                            default_values="0.1">
-        <DoubleRangeDomain name="range" min="0.0" max="1.0" />
-        <Documentation>Blending factor applied each frame is done with the
-          formula: 1 - 1 / (Alpha * MaxTimeToLive).
-        </Documentation>
-      </DoubleVectorProperty>
 
       <DoubleVectorProperty command="SetPosition"
                             default_values="0 0 0"
@@ -171,54 +97,6 @@
           tranform to use.
         </Documentation>
       </DoubleVectorProperty>
-
-      <IntVectorProperty name="Animate"
-                         command="SetAnimate"
-                         default_values="1"
-                         number_of_elements="1">
-        <BooleanDomain name="bool" />
-        <Documentation>Turn the animation ON or OFF.
-        </Documentation>
-      </IntVectorProperty>
-
-      <IntVectorProperty name="NumberOfAnimationSteps"
-                         command="SetNumberOfAnimationSteps"
-                         default_values="1"
-                         number_of_elements="1"
-                         panel_visibility="advanced">
-        <Documentation>Specify the maximum number of steps before the
-        animation stops. This feature is for testing purposes only!
-        </Documentation>
-      </IntVectorProperty>
-
-      <DoubleVectorProperty name="StepLength"
-                            command="SetStepLength"
-                            number_of_elements="1"
-                            default_values="0.005">
-        <DoubleRangeDomain name="range" min="0.0" />
-        <Documentation>Normalized integration step - allow to adjust particle
-          speed.
-        </Documentation>
-      </DoubleVectorProperty>
-
-      <IntVectorProperty name="NumberOfParticles"
-                         command="SetNumberOfParticles"
-                         number_of_elements="1"
-                         default_values="1000">
-        <IntRangeDomain name="range" min="1" />
-        <Documentation>Number of simulated particles in the flow.
-        </Documentation>
-      </IntVectorProperty>
-
-      <IntVectorProperty name="MaxTimeToLive"
-                         command="SetMaxTimeToLive"
-                         number_of_elements="1"
-                         default_values="600">
-        <IntRangeDomain name="range" min="1" />
-        <Documentation>Maximum number of iteration a particle is followed before
-        it dies.
-        </Documentation>
-      </IntVectorProperty>
     </RepresentationProxy>
 
     <!--======================================================================-->
@@ -234,24 +112,6 @@
           <Exception name="Input" />
           <Exception name="Visibility" />
         </ShareProperties>
-
-        <ExposedProperties>
-          <PropertyGroup label="3D LIC">
-            <Property name="Animate" />
-            <Property name="NumberOfAnimationSteps" />
-            <Property name="InputVectors" />
-            <Property name="Alpha" />
-            <Property name="StepLength" />
-            <Property name="NumberOfParticles" />
-            <Property name="MaxTimeToLive" />
-            <Hints>
-              <PropertyWidgetDecorator type="GenericDecorator"
-                                       mode="visibility"
-                                       property="Representation"
-                                       value="3D LIC" />
-           </Hints>
-          </PropertyGroup>
-        </ExposedProperties>
       </SubProxy>
     </Extension>
 
@@ -268,24 +128,6 @@
           <Exception name="Input" />
           <Exception name="Visibility" />
         </ShareProperties>
-
-        <ExposedProperties>
-          <PropertyGroup label="3D LIC">
-            <Property name="Animate" />
-            <Property name="NumberOfAnimationSteps" />
-            <Property name="InputVectors" />
-            <Property name="Alpha" />
-            <Property name="StepLength" />
-            <Property name="NumberOfParticles" />
-            <Property name="MaxTimeToLive" />
-            <Hints>
-              <PropertyWidgetDecorator type="GenericDecorator"
-                                       mode="visibility"
-                                       property="Representation"
-                                       value="3D LIC" />
-           </Hints>
-          </PropertyGroup>
-        </ExposedProperties>
       </SubProxy>
     </Extension>
 
@@ -303,23 +145,6 @@
           <Exception name="Visibility" />
         </ShareProperties>
 
-        <ExposedProperties>
-          <PropertyGroup label="3D LIC">
-            <Property name="Animate" />
-            <Property name="NumberOfAnimationSteps" />
-            <Property name="InputVectors" />
-            <Property name="Alpha" />
-            <Property name="StepLength" />
-            <Property name="NumberOfParticles" />
-            <Property name="MaxTimeToLive" />
-            <Hints>
-              <PropertyWidgetDecorator type="GenericDecorator"
-                                       mode="visibility"
-                                       property="Representation"
-                                       value="3D LIC" />
-           </Hints>
-          </PropertyGroup>
-        </ExposedProperties>
       </SubProxy>
     </Extension>
 
@@ -337,23 +162,6 @@
           <Exception name="Visibility" />
         </ShareProperties>
 
-        <ExposedProperties>
-          <PropertyGroup label="3D LIC">
-            <Property name="Animate" />
-            <Property name="NumberOfAnimationSteps" />
-            <Property name="InputVectors" />
-            <Property name="Alpha" />
-            <Property name="StepLength" />
-            <Property name="NumberOfParticles" />
-            <Property name="MaxTimeToLive" />
-            <Hints>
-              <PropertyWidgetDecorator type="GenericDecorator"
-                                       mode="visibility"
-                                       property="Representation"
-                                       value="3D LIC" />
-           </Hints>
-          </PropertyGroup>
-        </ExposedProperties>
       </SubProxy>
     </Extension>
 

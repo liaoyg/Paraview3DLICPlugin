@@ -10,12 +10,18 @@ class vtkImageData;
 class vtkInformation;
 class vtkInformationRequestKey;
 class vtkPExtentTranslator;
+class vtkPiecewiseFunction;
 class vtkPolyDataMapper;
 class vtkProperty;
 class vtkPVCacheKeeper;
 class vtkPVLODActor;
+class vtkVolume;
 class vtkScalarsToColors;
 class vtkLIC3DMapper;
+class vtkProjectedTetrahedraMapper;
+class vtkPVLODVolume;
+class vtkVolumeProperty;
+class vtkResampleToImage;
 
 class VTK_EXPORT vtkLIC3DRepresentation : public vtkPVDataRepresentation
 {
@@ -48,7 +54,7 @@ public:
 
 	//***************************************************************************
 	// Forwarded to vtkProperty.
-	virtual void SetAmbientColor(double r, double g, double b);
+	/*virtual void SetAmbientColor(double r, double g, double b);
 	virtual void SetColor(double r, double g, double b);
 	virtual void SetDiffuseColor(double r, double g, double b);
 	virtual void SetEdgeColor(double r, double g, double b);
@@ -58,7 +64,7 @@ public:
 	virtual void SetPointSize(double val);
 	virtual void SetSpecularColor(double r, double g, double b);
 	virtual void SetSpecularPower(double val);
-
+*/
 	//***************************************************************************
 	// Forwarded to Actor.
 	virtual void SetOrientation(double, double, double);
@@ -69,20 +75,27 @@ public:
 	virtual void SetUserTransform(const double[16]);
 
 	//***************************************************************************
-	// Forwarded to vtkStreamLinesMapper
-	virtual void SetAnimate(bool val);
-	virtual void SetAlpha(double val);
-	virtual void SetStepLength(double val);
-	virtual void SetNumberOfParticles(int val);
-	virtual void SetMaxTimeToLive(int val);
-	virtual void SetNumberOfAnimationSteps(int val);
+	// Forwarded to vtkVolumeProperty and vtkProperty (when applicable).
+	void SetInterpolationType(int val);
+	void SetColor(vtkColorTransferFunction* lut);
+	void SetScalarOpacity(vtkPiecewiseFunction* pwf);
+	void SetScalarOpacityUnitDistance(double val);
 
-	virtual void SetInputVectors(int, int, int, int attributeMode, const char* name);
+	//***************************************************************************
+	// Forwarded to vtkStreamLinesMapper
+	//virtual void SetAnimate(bool val);
+	//virtual void SetAlpha(double val);
+	//virtual void SetStepLength(double val);
+	//virtual void SetNumberOfParticles(int val);
+	//virtual void SetMaxTimeToLive(int val);
+	//virtual void SetNumberOfAnimationSteps(int val);
+
+	//virtual void SetInputVectors(int, int, int, int attributeMode, const char* name);
 
 	//***************************************************************************
 	// Forwarded to Mapper and LODMapper.
-	virtual void SetInterpolateScalarsBeforeMapping(int val);
-	virtual void SetLookupTable(vtkScalarsToColors* val);
+	//virtual void SetInterpolateScalarsBeforeMapping(int val);
+	//virtual void SetLookupTable(vtkScalarsToColors* val);
 
 	//@{
 	/**
@@ -92,7 +105,7 @@ public:
 	* 1 maps to VTK_COLOR_MODE_MAP_SCALARS
 	* @see vtkScalarsToColors::MapScalars
 	*/
-	void SetMapScalars(int val);
+	//void SetMapScalars(int val);
 
 	/**
 	* Fill input port information.
@@ -102,7 +115,7 @@ public:
 	/**
 	* Provides access to the actor used by this representation.
 	*/
-	vtkPVLODActor* GetActor() { return this->Actor; }
+	vtkPVLODVolume* GetActor() { return this->Volume; }
 
 	/**
 	* Convenience method to get the array name used to scalar color with.
@@ -163,14 +176,20 @@ protected:
 	/**
 	* Used in ConvertSelection to locate the rendered prop.
 	*/
-	virtual vtkPVLODActor* GetRenderedProp() { return this->Actor; };
+	//virtual vtkPVLODActor* GetRenderedProp() { return this->Actor; };
 
 	vtkImageData* Cache;
 	vtkAlgorithm* MBMerger;
 	vtkPVCacheKeeper* CacheKeeper;
-	vtkLIC3DMapper* LICMapper;
-	vtkProperty* Property;
-	vtkPVLODActor* Actor;
+	//vtkLIC3DMapper* LICMapper;
+	//vtkProperty* Property;
+	//vtkPVLODActor* Actor;
+
+	vtkProjectedTetrahedraMapper* RayCastMapper;
+	vtkVolumeProperty* VolProperty;
+	vtkPVLODVolume* Volume;
+
+	vtkResampleToImage* ResampleToImageFilter;
 
 	unsigned long DataSize;
 	double DataBounds[6];

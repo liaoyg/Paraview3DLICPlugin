@@ -26,6 +26,12 @@
 #include "vtkStructuredData.h"
 #include "vtkTransform.h"
 #include "vtkUnsignedCharArray.h"
+#include "vtkProjectedTetrahedraMapper.h"
+#include "vtkVolume.h"
+#include "vtkPVLODVolume.h"
+#include "vtkVolumeProperty.h"
+#include "vtkResampleToImage.h"
+#include "vtkPiecewiseFunction.h"
 
 #include <algorithm>
 #include <map>
@@ -96,12 +102,21 @@ vtkStandardNewMacro(vtkLIC3DRepresentation);
 
 vtkLIC3DRepresentation::vtkLIC3DRepresentation()
 {
-	this->LICMapper = vtkLIC3DMapper::New();
-	this->Property = vtkProperty::New();
-	
-	this->Actor = vtkPVLODActor::New();
-	this->Actor->SetProperty(this->Property);
-	this->Actor->SetEnableLOD(0);
+	//this->LICMapper = vtkLIC3DMapper::New();
+	//this->Property = vtkProperty::New();
+	//
+	//this->Actor = vtkPVLODActor::New();
+	//this->Actor->SetProperty(this->Property);
+	//this->Actor->SetEnableLOD(0);
+
+	this->ResampleToImageFilter = vtkResampleToImage::New();
+	this->ResampleToImageFilter->SetSamplingDimensions(128, 128, 128);
+
+	this->RayCastMapper = vtkProjectedTetrahedraMapper::New();
+	this->Volume = vtkPVLODVolume::New();
+	this->VolProperty = vtkVolumeProperty::New();
+	this->Volume->SetProperty(this->VolProperty);
+	this->Volume->SetEnableLOD(0);
 
 	this->CacheKeeper = vtkPVCacheKeeper::New();
 
@@ -123,17 +138,23 @@ vtkLIC3DRepresentation::vtkLIC3DRepresentation()
 
 vtkLIC3DRepresentation::~vtkLIC3DRepresentation()
 {
-	this->LICMapper->Delete();
-	this->Property->Delete();
-	this->Actor->Delete();
+	//this->LICMapper->Delete();
+	//this->Property->Delete();
+	//this->Actor->Delete();
 	this->CacheKeeper->Delete();
 	this->Cache->Delete();
 	this->MBMerger->Delete();
+
+	this->ResampleToImageFilter->Delete();
+	this->RayCastMapper->Delete();
+	this->VolProperty->Delete();
+	this->Volume->Delete();
 }
 
 int vtkLIC3DRepresentation::FillInputPortInformation(int, vtkInformation* info)
 {
-	info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkDataSet");
+	info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkUnstructuredGridBase");
+	info->Append(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkDataSet");
 	info->Append(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkMultiBlockDataSet");
 	info->Set(vtkAlgorithm::INPUT_IS_OPTIONAL(), 1);
 	return 1;
@@ -237,9 +258,16 @@ int vtkLIC3DRepresentation::RequestData(
 				this->CacheKeeper->SetInputConnection(this->MBMerger->GetOutputPort());
 			}
 		}
+		else
+		{
+			//this->ResampleToImageFilter->SetInputDataObject(inputDO);
+			//this->CacheKeeper->SetInputConnection(this->ResampleToImageFilter->GetOutputPort(0));
+			this->CacheKeeper->SetInputConnection(this->GetInternalOutputPort());
+		}
 
 		this->CacheKeeper->Update();
-		this->LICMapper->SetInputConnection(this->CacheKeeper->GetOutputPort());
+		//this->LICMapper->SetInputConnection(this->CacheKeeper->GetOutputPort());
+		this->RayCastMapper->SetInputConnection(this->CacheKeeper->GetOutputPort());
 
 		vtkDataSet* output = vtkDataSet::SafeDownCast(this->CacheKeeper->GetOutputDataObject(0));
 		this->DataSize = output->GetActualMemorySize();
@@ -248,7 +276,9 @@ int vtkLIC3DRepresentation::RequestData(
 	{
 		// when no input is present, it implies that this processes is on a node
 		// without the data input i.e. either client or render-server.
-		this->LICMapper->RemoveAllInputs();
+		//this->LICMapper->RemoveAllInputs();
+		this->RayCastMapper->RemoveAllInputs();
+		this->Volume->SetEnableLOD(1);
 	}
 
 	return this->Superclass::RequestData(request, inputVector, outputVector);
@@ -278,7 +308,8 @@ bool vtkLIC3DRepresentation::AddToView(vtkView* view)
 	vtkPVRenderView* rview = vtkPVRenderView::SafeDownCast(view);
 	if (rview)
 	{
-		rview->GetRenderer()->AddActor(this->Actor);
+		//rview->GetRenderer()->AddActor(this->Actor);
+		rview->GetRenderer()->AddVolume(this->Volume);
 		// Indicate that this is a prop to be rendered during hardware selection.
 		return this->Superclass::AddToView(view);
 	}
@@ -291,7 +322,8 @@ bool vtkLIC3DRepresentation::RemoveFromView(vtkView* view)
 	vtkPVRenderView* rview = vtkPVRenderView::SafeDownCast(view);
 	if (rview)
 	{
-		rview->GetRenderer()->RemoveActor(this->Actor);
+		//rview->GetRenderer()->RemoveActor(this->Actor);
+		rview->GetRenderer()->RemoveActor(this->Volume);
 		return this->Superclass::RemoveFromView(view);
 	}
 	return false;
@@ -300,8 +332,41 @@ bool vtkLIC3DRepresentation::RemoveFromView(vtkView* view)
 //----------------------------------------------------------------------------
 void vtkLIC3DRepresentation::UpdateMapperParameters()
 {
-	this->Actor->SetMapper(this->LICMapper);
-	this->Actor->SetVisibility(1);
+	//this->Actor->SetMapper(this->LICMapper);
+	//this->Actor->SetVisibility(1);
+	const char* colorArrayName = NULL;
+	int fieldAssociation = vtkDataObject::FIELD_ASSOCIATION_POINTS;
+
+	vtkInformation* info = this->GetInputArrayInformation(0);
+	if (info && info->Has(vtkDataObject::FIELD_ASSOCIATION()) &&
+		info->Has(vtkDataObject::FIELD_NAME()))
+	{
+		colorArrayName = info->Get(vtkDataObject::FIELD_NAME());
+		fieldAssociation = info->Get(vtkDataObject::FIELD_ASSOCIATION());
+	}
+	this->RayCastMapper->SelectScalarArray(colorArrayName);
+
+	switch (fieldAssociation)
+	{
+	case vtkDataObject::FIELD_ASSOCIATION_CELLS:
+		this->RayCastMapper->SetScalarMode(VTK_SCALAR_MODE_USE_CELL_FIELD_DATA);
+		//this->LODMapper->SetScalarMode(VTK_SCALAR_MODE_USE_CELL_FIELD_DATA);
+		break;
+
+	case vtkDataObject::FIELD_ASSOCIATION_NONE:
+		this->RayCastMapper->SetScalarMode(VTK_SCALAR_MODE_USE_FIELD_DATA);
+		//this->LODMapper->SetScalarMode(VTK_SCALAR_MODE_USE_FIELD_DATA);
+		break;
+
+	case vtkDataObject::FIELD_ASSOCIATION_POINTS:
+	default:
+		this->RayCastMapper->SetScalarMode(VTK_SCALAR_MODE_USE_POINT_FIELD_DATA);
+		//this->LODMapper->SetScalarMode(VTK_SCALAR_MODE_USE_POINT_FIELD_DATA);
+		break;
+	}
+
+	this->Volume->SetMapper(this->RayCastMapper);
+	this->Volume->SetVisibility(1);
 }
 
 //----------------------------------------------------------------------------
@@ -311,66 +376,93 @@ void vtkLIC3DRepresentation::PrintSelf(ostream& os, vtkIndent indent)
 }
 
 //***************************************************************************
+// Forwarded to vtkVolumeProperty.
+//----------------------------------------------------------------------------
+void vtkLIC3DRepresentation::SetInterpolationType(int val)
+{
+	this->VolProperty->SetInterpolationType(val);
+}
+
+//----------------------------------------------------------------------------
+void vtkLIC3DRepresentation::SetColor(vtkColorTransferFunction* lut)
+{
+	this->VolProperty->SetColor(lut);
+	//this->LODMapper->SetLookupTable(lut);
+}
+
+//----------------------------------------------------------------------------
+void vtkLIC3DRepresentation::SetScalarOpacity(vtkPiecewiseFunction* pwf)
+{
+	this->VolProperty->SetScalarOpacity(pwf);
+}
+
+//----------------------------------------------------------------------------
+void vtkLIC3DRepresentation::SetScalarOpacityUnitDistance(double val)
+{
+	this->VolProperty->SetScalarOpacityUnitDistance(val);
+}
+
+//***************************************************************************
 // Forwarded to Property.
 //----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetColor(double r, double g, double b)
-{
-	this->Property->SetColor(r, g, b);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetLineWidth(double val)
-{
-	this->Property->SetLineWidth(val);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetOpacity(double val)
-{
-	this->Property->SetOpacity(val);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetPointSize(double val)
-{
-	this->Property->SetPointSize(val);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetAmbientColor(double r, double g, double b)
-{
-	this->Property->SetAmbientColor(r, g, b);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetDiffuseColor(double r, double g, double b)
-{
-	this->Property->SetDiffuseColor(r, g, b);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetEdgeColor(double r, double g, double b)
-{
-	this->Property->SetEdgeColor(r, g, b);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetInterpolation(int val)
-{
-	this->Property->SetInterpolation(val);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetSpecularColor(double r, double g, double b)
-{
-	this->Property->SetSpecularColor(r, g, b);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetSpecularPower(double val)
-{
-	this->Property->SetSpecularPower(val);
-}
+//void vtkLIC3DRepresentation::SetColor(double r, double g, double b)
+//{
+//	//this->Property->SetColor(r, g, b);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetLineWidth(double val)
+//{
+//	//this->Property->SetLineWidth(val);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetOpacity(double val)
+//{
+//	//this->Property->SetOpacity(val);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetPointSize(double val)
+//{
+//	//this->Property->SetPointSize(val);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetAmbientColor(double r, double g, double b)
+//{
+//	//this->Property->SetAmbientColor(r, g, b);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetDiffuseColor(double r, double g, double b)
+//{
+//	//this->Property->SetDiffuseColor(r, g, b);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetEdgeColor(double r, double g, double b)
+//{
+//	//this->Property->SetEdgeColor(r, g, b);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetInterpolation(int val)
+//{
+//	//this->Property->SetInterpolation(val);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetSpecularColor(double r, double g, double b)
+//{
+//	//this->Property->SetSpecularColor(r, g, b);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetSpecularPower(double val)
+//{
+//	//this->Property->SetSpecularPower(val);
+//}
 
 //***************************************************************************
 // Forwarded to Actor.
@@ -378,37 +470,43 @@ void vtkLIC3DRepresentation::SetSpecularPower(double val)
 void vtkLIC3DRepresentation::SetVisibility(bool val)
 {
 	this->Superclass::SetVisibility(val);
-	this->Actor->SetVisibility(val ? 1 : 0);
+	//this->Actor->SetVisibility(val ? 1 : 0);
+	this->Volume->SetVisibility(val ? 1 : 0);
 }
 
 //----------------------------------------------------------------------------
 void vtkLIC3DRepresentation::SetOrientation(double x, double y, double z)
 {
-	this->Actor->SetOrientation(x, y, z);
+	//this->Actor->SetOrientation(x, y, z);
+	this->Volume->SetOrientation(x, y, z);
 }
 
 //----------------------------------------------------------------------------
 void vtkLIC3DRepresentation::SetOrigin(double x, double y, double z)
 {
-	this->Actor->SetOrigin(x, y, z);
+	//this->Actor->SetOrigin(x, y, z);
+	this->Volume->SetOrigin(x, y, z);
 }
 
 //----------------------------------------------------------------------------
 void vtkLIC3DRepresentation::SetPickable(int val)
 {
-	this->Actor->SetPickable(val);
+	//this->Actor->SetPickable(val);
+	this->Volume->SetPickable(val);
 }
 
 //----------------------------------------------------------------------------
 void vtkLIC3DRepresentation::SetPosition(double x, double y, double z)
 {
-	this->Actor->SetPosition(x, y, z);
+	//this->Actor->SetPosition(x, y, z);
+	this->Volume->SetPosition(x, y, z);
 }
 
 //----------------------------------------------------------------------------
 void vtkLIC3DRepresentation::SetScale(double x, double y, double z)
 {
-	this->Actor->SetScale(x, y, z);
+	//this->Actor->SetScale(x, y, z);
+	this->Volume->SetScale(x, y, z);
 }
 
 //----------------------------------------------------------------------------
@@ -416,54 +514,55 @@ void vtkLIC3DRepresentation::SetUserTransform(const double matrix[16])
 {
 	vtkNew<vtkTransform> transform;
 	transform->SetMatrix(matrix);
-	this->Actor->SetUserTransform(transform.GetPointer());
+	//this->Actor->SetUserTransform(transform.GetPointer());
+	this->Volume->SetUserTransform(transform.GetPointer());
 }
 
 //***************************************************************************
 // Forwarded to StreamLinesMapper.
 //----------------------------------------------------------------------------
-
-void vtkLIC3DRepresentation::SetAnimate(bool val)
-{
-	this->LICMapper->SetAnimate(val);
-}
-
+//
+//void vtkLIC3DRepresentation::SetAnimate(bool val)
+//{
+//	this->LICMapper->SetAnimate(val);
+//}
+//
 //----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetAlpha(double val)
-{
-	this->LICMapper->SetAlpha(val);
-}
-
+//void vtkLIC3DRepresentation::SetAlpha(double val)
+//{
+//	this->LICMapper->SetAlpha(val);
+//}
+//
 //----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetStepLength(double val)
-{
-	this->LICMapper->SetStepLength(val);
-}
-
+//void vtkLIC3DRepresentation::SetStepLength(double val)
+//{
+//	this->LICMapper->SetStepLength(val);
+//}
+//
 //----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetNumberOfParticles(int val)
-{
-	this->LICMapper->SetNumberOfParticles(val);
-}
-
+//void vtkLIC3DRepresentation::SetNumberOfParticles(int val)
+//{
+//	this->LICMapper->SetNumberOfParticles(val);
+//}
+//
 //----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetMaxTimeToLive(int val)
-{
-	this->LICMapper->SetMaxTimeToLive(val);
-}
-
+//void vtkLIC3DRepresentation::SetMaxTimeToLive(int val)
+//{
+//	this->LICMapper->SetMaxTimeToLive(val);
+//}
+//
 //----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetNumberOfAnimationSteps(int val)
-{
-	this->LICMapper->SetNumberOfAnimationSteps(val);
-}
-
+//void vtkLIC3DRepresentation::SetNumberOfAnimationSteps(int val)
+//{
+//	this->LICMapper->SetNumberOfAnimationSteps(val);
+//}
+//
 //----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetInputVectors(
-	int vtkNotUsed(idx), int port, int connection, int fieldAssociation, const char* name)
-{
-	this->LICMapper->SetInputArrayToProcess(1, port, connection, fieldAssociation, name);
-}
+//void vtkLIC3DRepresentation::SetInputVectors(
+//	int vtkNotUsed(idx), int port, int connection, int fieldAssociation, const char* name)
+//{
+//	this->LICMapper->SetInputArrayToProcess(1, port, connection, fieldAssociation, name);
+//}
 
 //----------------------------------------------------------------------------
 const char* vtkLIC3DRepresentation::GetColorArrayName()
@@ -481,30 +580,30 @@ const char* vtkLIC3DRepresentation::GetColorArrayName()
 // Methods merely forwarding parameters to internal objects.
 //****************************************************************************
 
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetLookupTable(vtkScalarsToColors* val)
-{
-	this->LICMapper->SetLookupTable(val);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetMapScalars(int val)
-{
-	if (val < 0 || val > 1)
-	{
-		vtkWarningMacro(<< "Invalid parameter for vtkStreamLinesRepresentation::SetMapScalars: "
-			<< val);
-		val = 0;
-	}
-	int mapToColorMode[] = { VTK_COLOR_MODE_DIRECT_SCALARS, VTK_COLOR_MODE_MAP_SCALARS };
-	this->LICMapper->SetColorMode(mapToColorMode[val]);
-}
-
-//----------------------------------------------------------------------------
-void vtkLIC3DRepresentation::SetInterpolateScalarsBeforeMapping(int val)
-{
-	this->LICMapper->SetInterpolateScalarsBeforeMapping(val);
-}
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetLookupTable(vtkScalarsToColors* val)
+//{
+//	this->LICMapper->SetLookupTable(val);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetMapScalars(int val)
+//{
+//	if (val < 0 || val > 1)
+//	{
+//		vtkWarningMacro(<< "Invalid parameter for vtkStreamLinesRepresentation::SetMapScalars: "
+//			<< val);
+//		val = 0;
+//	}
+//	int mapToColorMode[] = { VTK_COLOR_MODE_DIRECT_SCALARS, VTK_COLOR_MODE_MAP_SCALARS };
+//	this->LICMapper->SetColorMode(mapToColorMode[val]);
+//}
+//
+////----------------------------------------------------------------------------
+//void vtkLIC3DRepresentation::SetInterpolateScalarsBeforeMapping(int val)
+//{
+//	this->LICMapper->SetInterpolateScalarsBeforeMapping(val);
+//}
 
 void vtkLIC3DRepresentation::SetInputArrayToProcess(
 	int idx, int port, int connection, int fieldAssociation, const char* name)
@@ -516,29 +615,33 @@ void vtkLIC3DRepresentation::SetInputArrayToProcess(
 		return;
 	}
 
-	this->LICMapper->SetInputArrayToProcess(idx, port, connection, fieldAssociation, name);
+	//this->LICMapper->SetInputArrayToProcess(idx, port, connection, fieldAssociation, name);
+	this->RayCastMapper->SetInputArrayToProcess(idx, port, connection, fieldAssociation, name);
 
-	if (name && name[0])
-	{
-		this->LICMapper->SetScalarVisibility(1);
-		this->LICMapper->SelectColorArray(name);
-		this->LICMapper->SetUseLookupTableScalarRange(1);
-	}
-	else
-	{
-		this->LICMapper->SetScalarVisibility(0);
-		this->LICMapper->SelectColorArray(static_cast<const char*>(NULL));
-	}
+	//if (name && name[0])
+	//{
+	//	this->LICMapper->SetScalarVisibility(1);
+	//	this->LICMapper->SelectColorArray(name);
+	//	this->LICMapper->SetUseLookupTableScalarRange(1);
+	//	
+	//}
+	//else
+	//{
+	//	this->LICMapper->SetScalarVisibility(0);
+	//	this->LICMapper->SelectColorArray(static_cast<const char*>(NULL));
+	//}
 
 	switch (fieldAssociation)
 	{
 	case vtkDataObject::FIELD_ASSOCIATION_CELLS:
-		this->LICMapper->SetScalarMode(VTK_SCALAR_MODE_USE_CELL_FIELD_DATA);
+		//this->LICMapper->SetScalarMode(VTK_SCALAR_MODE_USE_CELL_FIELD_DATA);
+		this->RayCastMapper->SetScalarMode(VTK_SCALAR_MODE_USE_CELL_FIELD_DATA);
 		break;
 
 	case vtkDataObject::FIELD_ASSOCIATION_POINTS:
 	default:
-		this->LICMapper->SetScalarMode(VTK_SCALAR_MODE_USE_POINT_FIELD_DATA);
+		//this->LICMapper->SetScalarMode(VTK_SCALAR_MODE_USE_POINT_FIELD_DATA);
+		this->RayCastMapper->SetScalarMode(VTK_SCALAR_MODE_USE_POINT_FIELD_DATA);
 		break;
 	}
 }
